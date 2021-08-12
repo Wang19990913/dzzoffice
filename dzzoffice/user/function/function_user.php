@@ -10,7 +10,7 @@
 if (!defined('IN_DZZ')) {
     exit('Access Denied');
 }
-
+global $log_flag;
 function uc_user_login($username, $password, $isuid, $checkques = '', $questionid = '', $answer = '', $ip = '')
 {
     //应用登录挂载点
@@ -18,6 +18,7 @@ function uc_user_login($username, $password, $isuid, $checkques = '', $questioni
     \Hook::listen('applogin', $hookdata);
     list($username, $password, $isuid, $checkques, $questionid, $answer, $ip) = $hookdata;
 
+if($log_flag== -1){$status = -1;}
     if ($isuid == 1) {
         $user = C::t('user')->fetch_by_uid($username);
 
@@ -42,9 +43,38 @@ function uc_user_login($username, $password, $isuid, $checkques = '', $questioni
 
 }
 
+
+
 function userlogin($username, $password, $questionid = '', $answer = '', $loginfield = 'auto', $ip = '')
 {
-    $return = array();
+$return = array();
+ldap_set_option($ldap_conn, LDAP_OPT_PROTOCOL_VERSION, 3);
+$ldap_host = "server-00";
+$ldap_port = "389";
+$ldap_conn = ldap_connect($ldap_host, $ldap_port);
+$base_dn="uid=".$username.",cn=users,dc=sigtrum,dc=com";
+$ldapbind=ldap_bind($ldap_conn,$base_dn,$password);
+$base_dn  = "dc=sigtrum,dc=com";	
+$filter_col  = "uid";			
+$filter_val  = $username;   
+$result= ldap_search($ldap_conn, $base_dn, "($filter_col=$filter_val)");
+$user= ldap_get_entries($ldap_conn, $result);
+if($ldapbind)
+{
+	$mail_new=$user[0][mail][0];
+	$user = C::t('user')->fetch_by_username($username);
+	 if (empty($user))
+		{
+			uc_add_user($username, $password, $mail_new, $nickname = '', $uid = 0, $questionid = '', $answer = '', $regip = '');
+			$user = C::t('user')->fetch_by_username($username);
+		}else{
+			$salt=substr(uniqid(rand()), -6);
+			$password_new = md5(md5($password).$salt);
+			C::t('user')->update($user['username'], array('password' => $password_new,'authstr' => '','salt'=>$salt));
+			}
+}else{$log_flag= -1;}
+ldap_unbind($ldap_conn);
+ldap_close($ldap_conn);
 
     if ($loginfield == 'uid' && getglobal('setting/uidlogin')) {
         $isuid = 1;
